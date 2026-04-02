@@ -1,4 +1,5 @@
 export const runtime = 'edge';
+
 import { NextRequest, NextResponse } from "next/server";
 
 const FORMULA_PROMPT = `You are a professional mathematical formula recognition expert. Your task is to identify mathematical formulas in the given image and convert them into LaTeX format.
