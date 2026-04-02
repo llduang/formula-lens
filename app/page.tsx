@@ -218,8 +218,8 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ image: rawImageData }),
       });
-      if (!res.ok) throw new Error("识别请求失败");
       const data = await res.json();
+      if (!data.success) throw new Error(data.error || "识别请求失败");
       if (data.success && data.latex) {
         setLatexResult(data.latex);
         const record: FormulaRecord = {
