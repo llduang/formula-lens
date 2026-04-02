@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const DEFAULT_BASE_URL = "https://api.openai.com/v1";
-const DEFAULT_MODEL = "gpt-4o";
-
 const FORMULA_PROMPT = `You are a professional mathematical formula recognition expert. Your task is to identify mathematical formulas in the given image and convert them into LaTeX format.
 
 Rules:
@@ -29,21 +26,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const baseUrl = (process.env.AI_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
-    const model = process.env.AI_MODEL || DEFAULT_MODEL;
+    const baseUrl = (process.env.AI_BASE_URL || "https://open.bigmodel.cn/api/paas/v4").replace(/\/+$/, "");
+    const model = process.env.AI_MODEL || "glm-4v-flash";
     const apiKey = process.env.AI_API_KEY;
-
-    const debugInfo = "model=" + model + ", baseUrl=" + baseUrl + ", key=" + (apiKey ? apiKey.slice(0, 8) + "..." : "未设置");
 
     if (!apiKey) {
       return NextResponse.json(
-        {
-          success: false,
-          error: "未配置 AI_API_KEY 环境变量。请在 Vercel 项目的 Settings - Environment Variables 中添加。当前: " + debugInfo,
-        },
+        { success: false, error: "未配置 AI_API_KEY 环境变量" },
         { status: 500 }
       );
     }
+
+    const imageUrl = image.startsWith("data:") ? image : "data:image/png;base64," + image;
 
     const response = await fetch(baseUrl + "/chat/completions", {
       method: "POST",
@@ -53,21 +47,24 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         model: model,
+        stream: false,
         messages: [
           {
             role: "user",
             content: [
-              { type: "text", text: FORMULA_PROMPT },
               {
                 type: "image_url",
                 image_url: {
-                  url: image.startsWith("data:") ? image : "data:image/png;base64," + image,
+                  url: imageUrl,
                 },
+              },
+              {
+                type: "text",
+                text: FORMULA_PROMPT,
               },
             ],
           },
         ],
-        max_tokens: 2048,
       }),
     });
 
@@ -77,12 +74,11 @@ export async function POST(request: NextRequest) {
       var userMessage = "AI 接口返回错误 (" + response.status + ")";
       try {
         var errJson = JSON.parse(errText);
-        var msg = (errJson.error && errJson.error.message) || errJson.message || errJson.msg || errText;
+        var msg = (errJson.error && errJson.error.message) || errJson.message || errText;
         userMessage += ": " + msg;
       } catch (e) {
         userMessage += ": " + errText.slice(0, 200);
       }
-      userMessage += "\n\n配置: " + debugInfo;
       return NextResponse.json(
         { success: false, error: userMessage },
         { status: 500 }
@@ -90,11 +86,20 @@ export async function POST(request: NextRequest) {
     }
 
     var data = await response.json();
-    var latex = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
+    var latex = "";
+    try {
+      latex = data.choices[0].message.content || "";
+    } catch (e) {
+      latex = JSON.stringify(data).slice(0, 200);
+      return NextResponse.json(
+        { success: false, error: "AI 返回格式异常: " + latex },
+        { status: 500 }
+      );
+    }
 
     if (!latex) {
       return NextResponse.json(
-        { success: false, error: "AI 返回了空结果，请检查模型配置: " + debugInfo },
+        { success: false, error: "AI 返回了空结果" },
         { status: 400 }
       );
     }
@@ -104,13 +109,6 @@ export async function POST(request: NextRequest) {
       .replace(/```/g, "")
       .replace(/^\$+|\$+$/gm, "")
       .trim();
-
-    if (!latex) {
-      return NextResponse.json(
-        { success: false, error: "AI 返回内容为空" },
-        { status: 400 }
-      );
-    }
 
     return NextResponse.json({ success: true, latex: latex });
   } catch (error) {
