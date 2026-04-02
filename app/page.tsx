@@ -14,7 +14,7 @@ import {
   Eraser,
   Code2,
   Braces,
-  FunctionSquare,
+  SquareFunction,
   WrapText,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
@@ -81,7 +81,7 @@ const FORMAT_OPTIONS: FormatOption[] = [
   {
     id: "display",
     label: "\\[\\]",
-    icon: <FunctionSquare className="w-3.5 h-3.5" />,
+    icon: <SquareFunction className="w-3.5 h-3.5" />,
     desc: "\\[...\\] LaTeX 显示模式",
     transform: (l) => `\\\[\n${l}\n\\\]`,
   },
