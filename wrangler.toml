@@ -1,0 +1,9 @@
+name = "formula-lens"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# 这些变量在 Cloudflare 控制台设置，不要在这里填真实密钥
+# AI_API_KEY = "你的API密钥"
+# AI_BASE_URL = "https://api.openai.com/v1"
+# AI_MODEL = "gpt-4o"
