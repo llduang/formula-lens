@@ -1,22 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 
-/**
- * 公式识别 API
- *
- * 支持任何 OpenAI 兼容的视觉模型 API，例如：
- * - OpenAI:           https://api.openai.com/v1/chat/completions        (模型: gpt-4o)
- * - 智谱 GLM-4V:      https://open.bigmodel.cn/api/paas/v4/chat/completions
- * - 阿里通义千问 VL:   https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions (模型: qwen-vl-max)
- * - DeepSeek:          https://api.deepseek.com/chat/completions
- * - SiliconFlow:       https://api.siliconflow.cn/v1/chat/completions     (模型: Qwen/Qwen2.5-VL-7B-Instruct)
- * - Groq:              https://api.groq.com/openai/v1/chat/completions
- *
- * 环境变量（在 Cloudflare 控制台设置）：
- *   AI_API_KEY    - API 密钥（必填）
- *   AI_BASE_URL   - API 地址（选填，默认 https://api.openai.com/v1）
- *   AI_MODEL      - 模型名（选填，默认 gpt-4o）
- */
-
 const DEFAULT_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_MODEL = "gpt-4o";
 
@@ -50,24 +33,26 @@ export async function POST(request: NextRequest) {
     const model = process.env.AI_MODEL || DEFAULT_MODEL;
     const apiKey = process.env.AI_API_KEY;
 
+    const debugInfo = "model=" + model + ", baseUrl=" + baseUrl + ", key=" + (apiKey ? apiKey.slice(0, 8) + "..." : "未设置");
+
     if (!apiKey) {
       return NextResponse.json(
         {
           success: false,
-          error: "未配置 AI_API_KEY，请在部署平台的环境变量中添加",
+          error: "未配置 AI_API_KEY 环境变量。请在 Vercel 项目的 Settings - Environment Variables 中添加。当前: " + debugInfo,
         },
         { status: 500 }
       );
     }
 
-    const response = await fetch(`${baseUrl}/chat/completions`, {
+    const response = await fetch(baseUrl + "/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: "Bearer " + apiKey,
       },
       body: JSON.stringify({
-        model,
+        model: model,
         messages: [
           {
             role: "user",
@@ -76,9 +61,7 @@ export async function POST(request: NextRequest) {
               {
                 type: "image_url",
                 image_url: {
-                  url: image.startsWith("data:")
-                    ? image
-                    : `data:image/png;base64,${image}`,
+                  url: image.startsWith("data:") ? image : "data:image/png;base64," + image,
                 },
               },
             ],
@@ -91,19 +74,31 @@ export async function POST(request: NextRequest) {
     if (!response.ok) {
       const errText = await response.text();
       console.error("AI API error:", response.status, errText);
+      var userMessage = "AI 接口返回错误 (" + response.status + ")";
+      try {
+        var errJson = JSON.parse(errText);
+        var msg = (errJson.error && errJson.error.message) || errJson.message || errJson.msg || errText;
+        userMessage += ": " + msg;
+      } catch (e) {
+        userMessage += ": " + errText.slice(0, 200);
+      }
+      userMessage += "\n\n配置: " + debugInfo;
       return NextResponse.json(
-        {
-          success: false,
-          error: `AI 接口调用失败 (${response.status})，请检查 API Key 和模型配置`,
-        },
+        { success: false, error: userMessage },
         { status: 500 }
       );
     }
 
-    const data = await response.json();
-    let latex = data.choices?.[0]?.message?.content || "";
+    var data = await response.json();
+    var latex = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
 
-    // 清洗响应：去掉 $、代码块标记等
+    if (!latex) {
+      return NextResponse.json(
+        { success: false, error: "AI 返回了空结果，请检查模型配置: " + debugInfo },
+        { status: 400 }
+      );
+    }
+
     latex = latex
       .replace(/```(?:latex|math)?\n?/g, "")
       .replace(/```/g, "")
@@ -112,12 +107,12 @@ export async function POST(request: NextRequest) {
 
     if (!latex) {
       return NextResponse.json(
-        { success: false, error: "未能识别图片中的公式" },
+        { success: false, error: "AI 返回内容为空" },
         { status: 400 }
       );
     }
 
-    return NextResponse.json({ success: true, latex });
+    return NextResponse.json({ success: true, latex: latex });
   } catch (error) {
     console.error("Formula recognition error:", error);
     return NextResponse.json(
